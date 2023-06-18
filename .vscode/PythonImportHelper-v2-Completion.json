@@ -1,5 +1,53 @@
 [
     {
+        "label": "Serial",
+        "importPath": "serial",
+        "description": "serial",
+        "isExtraImport": true,
+        "detail": "serial",
+        "documentation": {}
+    },
+    {
+        "label": "Thread",
+        "importPath": "threading",
+        "description": "threading",
+        "isExtraImport": true,
+        "detail": "threading",
+        "documentation": {}
+    },
+    {
+        "label": "Event",
+        "importPath": "threading",
+        "description": "threading",
+        "isExtraImport": true,
+        "detail": "threading",
+        "documentation": {}
+    },
+    {
+        "label": "Thread",
+        "importPath": "threading",
+        "description": "threading",
+        "isExtraImport": true,
+        "detail": "threading",
+        "documentation": {}
+    },
+    {
+        "label": "Queue",
+        "importPath": "queue",
+        "description": "queue",
+        "isExtraImport": true,
+        "detail": "queue",
+        "documentation": {}
+    },
+    {
+        "label": "abstractmethod",
+        "importPath": "abc",
+        "description": "abc",
+        "isExtraImport": true,
+        "detail": "abc",
+        "documentation": {}
+    },
+    {
         "label": "dataclass",
         "importPath": "dataclasses",
         "description": "dataclasses",
@@ -33,20 +81,39 @@
         "documentation": {}
     },
     {
-        "label": "Thread",
-        "importPath": "threading",
-        "description": "threading",
-        "isExtraImport": true,
-        "detail": "threading",
-        "documentation": {}
-    },
-    {
         "label": "time",
         "kind": 6,
         "isExtraImport": true,
         "importPath": "time",
         "description": "time",
         "detail": "time",
+        "documentation": {}
+    },
+    {
+        "label": "Transport",
+        "kind": 6,
+        "importPath": "src.backend",
+        "description": "src.backend",
+        "peekOfCode": "class Transport:\n    def __init__(self) -> None:\n        self.timeout_ms: int = 1000\n        self._is_connected: bool = False\n    def connect(self) -> bool:\n        if self._is_connected:\n            return False\n        if self.do_connect():\n            self._is_connected = True\n        self.do_set_timeout(self.timeout_ms)",
+        "detail": "src.backend",
+        "documentation": {}
+    },
+    {
+        "label": "TransportSerial",
+        "kind": 6,
+        "importPath": "src.backend",
+        "description": "src.backend",
+        "peekOfCode": "class TransportSerial(Transport):\n    def __init__(self, port) -> None:\n        super().__init__()\n        self._serial = Serial(baudrate=115200)\n        self._serial.port = port\n    @abstractmethod\n    def do_set_timeout(self, timeout_ms: int) -> None:\n        self._serial.timeout = timeout_ms / 1000\n        self._serial.write_timeout = timeout_ms / 1000\n    @abstractmethod",
+        "detail": "src.backend",
+        "documentation": {}
+    },
+    {
+        "label": "Backend",
+        "kind": 6,
+        "importPath": "src.backend",
+        "description": "src.backend",
+        "peekOfCode": "class Backend:\n    def __init__(self) -> None:\n        self._rx = Queue()\n        self._tx = Queue()\n        self._transport: Transport = None\n        self._stop_flag = Event()\n    def start(self, transport: Transport) -> None:\n        self._stop_flag.clear()\n        self._transport = transport\n        Thread(target=self._run, daemon=True).start()",
+        "detail": "src.backend",
         "documentation": {}
     },
     {
