@@ -142,42 +142,67 @@ class ContentGeneral(Content):
         self.attitude_info.pitchspeed.set(msg.pitchspeed)
         self.attitude_info.yawspeed.set(msg.yawspeed)
 
-
 class ContentPid(Content):
-    def __init__(self, parent, save_callback: callable) -> None:
+    def __init__(self, parent, save_callback: callable, asac: ASAC) -> None:
         super().__init__(parent, 'PID')
+        self._asac = asac
         pack = {'padx': 10, 'pady': 10, 'ipadx': 5, 'ipady': 5}
         self.frame_roll = tk.LabelFrame(self.content, **frame_style, text='ROLL')
         self.frame_pitch = tk.LabelFrame(self.content, **frame_style, text='PITCH')
         self.frame_yaw = tk.LabelFrame(self.content, **frame_style, text='YAW')
 
-        self.roll_p = ParamFloat(self.frame_roll, 0, 'P', 0)
-        self.roll_i = ParamFloat(self.frame_roll, 1, 'I', 0)
-        self.roll_d = ParamFloat(self.frame_roll, 2, 'D', 0)
-        self.pitch_p = ParamFloat(self.frame_pitch, 0, 'P', 0)
-        self.pitch_i = ParamFloat(self.frame_pitch, 1, 'I', 0)
-        self.pitch_d = ParamFloat(self.frame_pitch, 2, 'D', 0)
-        self.yaw_p = ParamFloat(self.frame_yaw, 0, 'P', 0)
-        self.yaw_i = ParamFloat(self.frame_yaw, 1, 'I', 0)
-        self.yaw_d = ParamFloat(self.frame_yaw, 2, 'D', 0)
+        self.pid_gyro_roll_p = ParamFloat(self.frame_roll, 0, 'P', 0)
+        self.pid_gyro_roll_i = ParamFloat(self.frame_roll, 1, 'I', 0)
+        self.pid_gyro_roll_d = ParamFloat(self.frame_roll, 2, 'D', 0)
+        self.pid_gyro_pitch_p = ParamFloat(self.frame_pitch, 0, 'P', 0)
+        self.pid_gyro_pitch_i = ParamFloat(self.frame_pitch, 1, 'I', 0)
+        self.pid_gyro_pitch_d = ParamFloat(self.frame_pitch, 2, 'D', 0)
+        self.pid_gyro_yaw_p = ParamFloat(self.frame_yaw, 0, 'P', 0)
+        self.pid_gyro_yaw_i = ParamFloat(self.frame_yaw, 1, 'I', 0)
+        self.pid_gyro_yaw_d = ParamFloat(self.frame_yaw, 2, 'D', 0)
 
         self.frame_roll.pack(side=tk.LEFT, **pack)
         self.frame_pitch.pack(side=tk.LEFT, **pack)
         self.frame_yaw.pack(side=tk.LEFT, **pack)
 
-        btn_save = tk.Button(self, text='Save', **btn_style, command=save_callback)
+        btn_save = tk.Button(self, text='Save', **btn_style, command=self._save)
         btn_save.pack()
 
-    def set_pid_values(self, pid_values: Dict[str, float]) -> None:
-        self.roll_p.set(pid_values.get('roll_p', 0))
-        self.roll_i.set(pid_values.get('roll_i', 0))
-        self.roll_d.set(pid_values.get('roll_d', 0))
-        self.pitch_p.set(pid_values.get('pitch_p', 0))
-        self.pitch_i.set(pid_values.get('pitch_i', 0))
-        self.pitch_d.set(pid_values.get('pitch_d', 0))
-        self.yaw_p.set(pid_values.get('yaw_p', 0))
-        self.yaw_i.set(pid_values.get('yaw_i', 0))
-        self.yaw_d.set(pid_values.get('yaw_d', 0))
+    def _save(self) -> None:
+        self._asac.set_parameter(b'pid_gyro_roll_p', self.pid_gyro_roll_p.get(), 9, None)
+        self._asac.set_parameter(b'pid_gyro_roll_i', self.pid_gyro_roll_i.get(), 9, None)
+        self._asac.set_parameter(b'pid_gyro_roll_d', self.pid_gyro_roll_d.get(), 9, None)
+        self._asac.set_parameter(b'pid_gyro_pitch_p', self.pid_gyro_pitch_p.get(), 9, None)
+        self._asac.set_parameter(b'pid_gyro_pitch_i', self.pid_gyro_pitch_i.get(), 9, None)
+        self._asac.set_parameter(b'pid_gyro_pitch_d', self.pid_gyro_pitch_d.get(), 9, None)
+        self._asac.set_parameter(b'pid_gyro_yaw_p', self.pid_gyro_yaw_p.get(), 9, None)
+        self._asac.set_parameter(b'pid_gyro_yaw_i', self.pid_gyro_yaw_i.get(), 9, None)
+        self._asac.set_parameter(b'pid_gyro_yaw_d', self.pid_gyro_yaw_d.get(), 9, None)
+        time.sleep(1)
+        self._asac.write_params_to_flash()
+        time.sleep(1)
+        self._asac.reboot()
+
+    def set_pid_values(self, pid_values: Dict[str, common.MAVLink_param_value_message]) -> None:
+        PID_PARAMS = [
+            'pid_gyro_roll_p',
+            'pid_gyro_roll_i',
+            'pid_gyro_roll_d',
+            'pid_gyro_pitch_p',
+            'pid_gyro_pitch_i',
+            'pid_gyro_pitch_d',
+            'pid_gyro_yaw_p',
+            'pid_gyro_yaw_i',
+            'pid_gyro_yaw_d'
+        ]
+        for pid_param in PID_PARAMS:
+            value = pid_values.get(pid_param)
+            if value is not None:
+                value = value.param_value
+            else:
+                value = 0
+
+            getattr(self, pid_param).set(value)
 
 class ContentMotors(Content):
     def __init__(self, parent) -> None:
@@ -199,7 +224,8 @@ class Gui(tk.Tk):
         self.title('ASAC GCS')
 
         # Backend and control
-        self._asac = ASAC()
+        self._asac = ASAC(on_connect=self._on_connect,
+                          on_disconnect=self._on_disconnect)
         # Add handlers for MAVlink messages
         self._asac.add_message_handler(common.MAVLINK_MSG_ID_HEARTBEAT, self._mavlink_heartbeat)
         #self._asac.add_message_handler(common.MAVLINK_MSG_ID_SCALED_IMU, self._mavlink_scaled_imu)
@@ -228,17 +254,20 @@ class Gui(tk.Tk):
                                               textvariable=self.combo_serial_port_var)
         self.btn_connect = tk.Button(self.frame_ctrl, text='Connect',
                                      command=self._connect, **btn_style)
+        self.btn_reboot = tk.Button(self.frame_ctrl, text='Reboot',
+                                     command=self._reboot, **btn_style)
         self.label_image_connected = tk.Label(self.frame_ctrl, **label_style)
 
         title.pack(side=tk.LEFT, **ctrl_pack_kw)
         self.label_image_connected.pack(side=tk.RIGHT, **ctrl_pack_kw)
         self.btn_connect.pack(side=tk.RIGHT, **ctrl_pack_kw)
+        self.btn_reboot.pack(side=tk.RIGHT, **ctrl_pack_kw)
         self.combo_serial_port.pack(side=tk.RIGHT, **ctrl_pack_kw)
         serial_port.pack(side=tk.RIGHT, **ctrl_pack_kw)
 
         # -- Main content -- #
         self.content_general = ContentGeneral(self.frame_content, self.general_save)
-        self.content_pid = ContentPid(self.frame_content, self.pid_save)
+        self.content_pid = ContentPid(self.frame_content, self.pid_save, self._asac)
         self.content_motors = ContentMotors(self.frame_content)
         self.contents = {
             'general': self.content_general,
@@ -274,7 +303,7 @@ class Gui(tk.Tk):
         self._info = tk.Label(self, bg='red')
 
         # States
-        self.active_content: str = 'general'
+        self.active_content: str = 'pid'
 
         self._available_serial_ports: List[ListPortInfo] = []
         Thread(target=self._available_serial_port_thread, daemon=True).start()
@@ -282,36 +311,29 @@ class Gui(tk.Tk):
         # Update UI state once before we start
         self._update_state()
 
+    def _on_connect(self) -> None:
+        self._asac.get_parameters(self._update_parameters)
+        self._update_state()
+
+    def _on_disconnect(self) -> None:
+        self._update_state()
+
     def _connect(self) -> None:
         port = self.combo_serial_port_var.get()
         if port:
             port, desc = port.split('(')
             port = port.strip()
-            connect_ok = self._asac.start(port)
-            if connect_ok:
-                self._asac.get_parameters(self._update_parameters)
-                self._update_state()
-            else:
-                self.info_popup(f'Failed to connect to port {port}', bg='red')
+            self._asac.start(port)
+            #self.info_popup(f'Failed to connect to port {port}', bg='red')
 
     def _disconnect(self) -> None:
         self._asac.stop()
-        self._update_state()
 
     def _update_parameters(self, params: Dict[str, common.MAVLink_param_value_message]) -> None:
-        # TODO: Fix names
-        pid_params = {
-            'roll_p':  params.get('pid_gyro_roll_p', 0).param_value,
-            'roll_i':  params.get('pid_gyro_roll_i', 0).param_value,
-            'roll_d':  params.get('pid_gyro_roll_d', 0).param_value,
-            'pitch_p': params.get('pid_gyro_pitch_p', 0).param_value,
-            'pitch_i': params.get('pid_gyro_pitch_i', 0).param_value,
-            'pitch_d': params.get('pid_gyro_pitch_d', 0).param_value,
-            'yaw_p':   params.get('pid_gyro_yaw_p', 0).param_value,
-            'yaw_i':   params.get('pid_gyro_yaw_i', 0).param_value,
-            'yaw_d':   params.get('pid_gyro_yaw_d', 0).param_value
-        }
-        self.content_pid.set_pid_values(pid_params)
+        self.content_pid.set_pid_values(params)
+
+    def _reboot(self) -> None:
+        self._asac.reboot()
 
     def general_save(self) -> None:
         self.info_popup('Saved!', timeout_ms=1000)
